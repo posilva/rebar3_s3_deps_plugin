@@ -13,7 +13,7 @@
 %% ===================================================================
 %% Public API
 %% ===================================================================
-
+%% TODO: Spec functions
 -spec lock(file:filename_all(), tuple()) -> rebar_resource:resource().
 lock(_Dir, Source) ->
   Source.
@@ -64,16 +64,13 @@ download(Dir, {s3, Bucket, {recursive, Path}, Options}, _State) ->
   end, Content),  
   {ok, OutputDir}.
 
-  
-
-%erlcloud_s3:list_objects("opspool", [{prefix, "latest/binaries"}]
 -spec needs_update(file:filename_all(), tuple()) -> boolean().
 needs_update(_Dir, _Source) ->
   true.
 
 -spec make_vsn(file:filename_all()) -> {plain, string()} | {error, string()}.
 make_vsn(_Dir) ->
-  {plain, "1.2.0"}.
+  {plain, "1.2.0"}. %% TODO how to check a version 
   %%{error, "Replacing version of type s3 not supported."}.
 
 %% ===================================================================
