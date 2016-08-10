@@ -1,0 +1,12 @@
+{application, rebar3_s3_deps, [
+  {description, "A rebar3 plugin to fetch dependencies from s3 bucket"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications, [kernel, stdlib, ercloud]},
+  {env, []},
+  {modules, []},
+
+  {contributors, []},
+  {licenses, []},
+  {links, []}
+]}.
