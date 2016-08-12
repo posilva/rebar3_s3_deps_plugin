@@ -22,45 +22,31 @@ download(Dir, {s3, Bucket, {object, Object}}, State) ->
 download(Dir, {s3, Bucket, {object, Object}, Options}, _State) ->
   Config = init_resource(Options),
   ok = filelib:ensure_dir(Dir),
-  rebar_api:debug("Downloading object: ~p", [{Bucket, Object}]),
-  S3Object = erlcloud_s3:get_object(Bucket, Object, Config),
-  Content  = proplists:get_value(content, S3Object),
+  
   FileName = filename:basename(Object), 
   FullName = filename:join([Dir, FileName]),
-  {ok, ObjectFD} = file:open(FullName, [write]),
-  ok = file:write(ObjectFD, Content),
-  ok = file:close(ObjectFD),
+  
+  ok = save_s3_object(Bucket, Object, Config, FullName),
+  
+  %% check if should be handled as tar file
+  ok = maybe_extract_tar(Options, Dir, FullName),
   {ok, FullName};
+
 download(Dir, {s3, Bucket, {recursive, Path}}, State) ->  
   download(Dir, {s3, Bucket, {recursive, Path}, []}, State);
 download(Dir, {s3, Bucket, {recursive, Path}, Options}, _State) ->
   Config = init_resource(Options),
   ok = filelib:ensure_dir(Dir),
 
-  rebar_api:debug("Downloading recursive Path from: ~p", [{Bucket, Path}]),
-  AWSConfig = erlang:get({?MODULE, aws_config}),
-  ListOfObjects =  erlcloud_s3:list_objects(Bucket, [{prefix, Path}], AWSConfig),
-  rebar_api:debug("S3 objects list: ~p", [ListOfObjects]),
-  Content  = proplists:get_value(contents, ListOfObjects),
   OutputDir = filename:join([Dir, Path]),
+  ListOfObjects =  erlcloud_s3:list_objects(Bucket, [{prefix, Path}], Config),
+  
+  Content  = proplists:get_value(contents, ListOfObjects),
+  
   lists:foreach(fun(E) -> 
     Key = proplists:get_value(key, E),
-
     FullName = filename:join([Dir, Key]),
-    DirName = filename:dirname(FullName),
-
-    ok = filelib:ensure_dir(FullName),
-
-    rebar_api:debug("Getting object: ~p from bucket ~p, will be saved at ~p", [Key, Bucket, DirName]),
-    S3Object = erlcloud_s3:get_object(Bucket, Key, Config),
-
-    FileContent  = proplists:get_value(content, S3Object),
-    rebar_api:debug("Saving object: ~p to  ~p", [Key, FullName]),
-    {ok, ObjectFD} = file:open(FullName, [write]),
-
-    ok = file:write(ObjectFD, FileContent),
-
-    ok = file:close(ObjectFD)
+    ok = save_s3_object(Bucket, Key, Config, FullName) 
   end, Content),  
   {ok, OutputDir}.
 
@@ -70,12 +56,36 @@ needs_update(_Dir, _Source) ->
 
 -spec make_vsn(file:filename_all()) -> {plain, string()} | {error, string()}.
 make_vsn(_Dir) ->
-  {plain, "1.2.0"}. %% TODO how to check a version 
-  %%{error, "Replacing version of type s3 not supported."}.
+  {error, "Replacing version of type s3 not supported."}.
 
 %% ===================================================================
 %% Internal Functions
 %% ===================================================================
+maybe_extract_tar(Options, Dir, FullName) -> 
+  case extract_tar_option(Options) of
+    undefined -> 
+      rebar_api:debug("Nothing to uncompress with this options: ~p", [Options]),
+      ok;
+    TarOptions -> 
+      rebar_api:debug("Uncompress Options ~p : uncompressing file ~p", [Options, FullName]),
+      ok = erl_tar:extract(FullName, [{cwd, Dir} | TarOptions]),
+      ok = file:delete(FullName)
+  end.
+
+extract_tar_option(Options) -> 
+  proplists:get_value(tar, Options, undefined).
+  
+save_s3_object(Bucket, Object, Config, Filename) ->  
+  rebar_api:debug("Downloading object: ~p", [{Bucket, Object}]),
+  S3Object = erlcloud_s3:get_object(Bucket, Object, Config),
+  Content  = proplists:get_value(content, S3Object),
+
+  ok = filelib:ensure_dir(Filename),
+  
+  {ok, ObjectFD} = file:open(Filename, [write]),
+  ok = file:write(ObjectFD, Content),
+  ok = file:close(ObjectFD).
+
 init_resource(Options) -> 
   ok = check_options(Options),
   _ = application:ensure_all_started(erlcloud),
@@ -123,7 +133,10 @@ check_options([{profile, Profile} | Rest]) when is_list(Profile) ; is_binary(Pro
   check_options(Rest);
 check_options([{region, Region} | Rest]) when is_list(Region) ; is_binary(Region) -> 
   check_options(Rest);
-check_options([{timeout, Timeout} | Rest]) when is_integer(Timeout), Timeout > 0-> 
+check_options([{timeout, Timeout} | Rest]) when is_integer(Timeout), Timeout > 0 -> 
+  check_options(Rest);  
+check_options([{tar, Type} | Rest]) when is_list(Type)  -> 
+  %% TODO validate tar options ([compressed], [])
   check_options(Rest);  
 check_options([Other| _]) -> 
   rebar_api:error("Invalid options: ~p ", [Other]),
