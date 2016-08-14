@@ -17,7 +17,14 @@ Add the plugin to your rebar config:
         { rebar3_s3_deps, ".*", {git, "git@host:posilva/rebar3_s3_deps.git", {tag, "0.1.0"}}}
     ]}.
 
-Then just call your plugin directly in an existing application:
+Add the s3 resource dependency in rebar config like following:
 
+	{appname, {s3, "my-deploy-bucket-name", {object, "prod/v1.0/raw_dep.tgz"}, 
+                [
+                    {profile, default}, %% The AWS credentials profile   
+                    {tar,[compressed]}, %% Decompress the compressed tar file
+                    {raw, [{vsn, "1.2.1"}]} %% It's a raw dependency
+    			]
+    			}
+    }
 
-    $ rebar3 rebar3_s3_deps
